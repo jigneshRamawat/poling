@@ -2,7 +2,9 @@
  * API service for communicating with the Node/Express backend
  */
 
-const BASE_URL = import.meta.env.VITE_API_URL || '';
+const BASE_URL =
+  import.meta.env.VITE_API_URL ||
+  'https://poling-f8u0.onrender.com';
 
 /**
  * Robust JSON fetch wrapper that guards against non-JSON / HTML responses
