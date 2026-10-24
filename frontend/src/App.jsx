@@ -208,8 +208,19 @@ export default function App() {
         {/* Global Error Banner */}
         {errorMessage && (
           <div className="global-error-banner" id="global-error-banner" role="alert">
-            <span className="error-icon">⚠️</span>
-            <span>{errorMessage}</span>
+            <div className="global-error-banner-header">
+              <span className="error-icon">⚠️</span>
+              <span>{errorMessage}</span>
+            </div>
+            {!pollData && (
+              <button
+                type="button"
+                className="global-error-retry-btn"
+                onClick={initialize}
+              >
+                🔄 पुनः प्रयास करें (Retry)
+              </button>
+            )}
           </div>
         )}
 

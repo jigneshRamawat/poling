@@ -240,12 +240,37 @@ body {
   color: #9f1239;
   padding: 0.85rem 1.2rem;
   border-radius: var(--radius-md);
-  font-size: 0.95rem;
-  font-weight: 600;
+  font-size: 0.92rem;
+  font-weight: 500;
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 0.6rem;
   animation: slideDown 0.3s ease;
+  white-space: pre-line;
+}
+
+.global-error-banner-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  font-weight: 600;
+}
+
+.global-error-retry-btn {
+  background: #e11d48;
+  color: #fff;
+  border: none;
+  padding: 0.4rem 0.9rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  align-self: flex-start;
+  transition: background 0.2s;
+}
+
+.global-error-retry-btn:hover {
+  background: #be123c;
 }
 
 /* ==========================================================================
