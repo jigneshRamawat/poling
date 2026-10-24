@@ -8,6 +8,7 @@
 const POLL_OPTIONS = [
   { id: "option-1", name: "विकल्प 1 - भावेश वैष्णव" },
   { id: "option-2", name: "विकल्प 2 - गोमा राम " },
+  { id: "option-3", name: "विकल्प 3 - विष्णु चौधरी" },
 ];
 
 module.exports = POLL_OPTIONS;
