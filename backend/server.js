@@ -26,6 +26,7 @@ const allowedOrigins = [
   CLIENT_URL,
   'http://localhost:5173',
   'http://127.0.0.1:5173',
+  'https://poling-cr5s.vercel.app',
   'https://poling-uzzj.vercel.app',
 ].filter(Boolean);
 
