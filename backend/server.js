@@ -1,9 +1,10 @@
+
 const http = require('http');
 const express = require('express');
 const cors = require('cors');
 const { Server } = require('socket.io');
-
 const mongoose = require('mongoose');
+
 const { connectDB, ensureAppCollections } = require('./config/db');
 const POLL_CONFIG = require('./config/pollConfig');
 const pollRoutes = require('./routes/pollRoutes');
@@ -16,31 +17,48 @@ const app = express();
 const server = http.createServer(app);
 
 const PORT = Number(process.env.PORT || 5001);
-const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
 
-// Setup Socket.IO with CORS
+const CLIENT_URL =
+  process.env.CLIENT_URL || 'http://localhost:5173';
+
+// Allowed frontend origins
+const allowedOrigins = [
+  CLIENT_URL,
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'https://poling-uzzj.vercel.app',
+].filter(Boolean);
+
+// Check CORS origin consistently for Express and Socket.IO
+const corsOptions = {
+  origin(origin, callback) {
+    // Allow requests without an Origin header, such as curl
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    console.warn(`[CORS] Blocked origin: ${origin}`);
+    return callback(new Error('Origin not allowed by CORS'));
+  },
+  methods: ['GET', 'POST', 'PATCH', 'OPTIONS'],
+  credentials: true,
+};
+
+// Express middleware
+app.use(cors(corsOptions));
+app.use(express.json({ limit: '10kb' }));
+
+// Socket.IO configuration
 const io = new Server(server, {
   cors: {
-    origin: [CLIENT_URL, 'http://localhost:5173', 'http://127.0.0.1:5173'],
+    origin: allowedOrigins,
     methods: ['GET', 'POST', 'PATCH'],
     credentials: true,
   },
 });
 
-// Make io accessible throughout Express controllers
+// Make Socket.IO available to controllers
 app.set('io', io);
-
-// Basic middleware
-app.use(
-  cors({
-    origin: [CLIENT_URL, 'http://localhost:5173', 'https://poling-uzzj.vercel.app'],
-    credentials: true,
-  })
-);
-app.use(express.json({ limit: '10kb' }));
-
-// Apply rate limiting
-app.use('/api/', apiLimiter);
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -55,17 +73,16 @@ app.get('/', (req, res) => {
     },
   });
 });
-// API Endpoints
-app.use('/api/poll', pollRoutes);
-app.use('/api/votes', voteRoutes);
-app.get('/api/results', getResults);
 
-// Health check endpoint
+// Health check
 app.get('/api/health', (req, res) => {
-  res.json({
-    status: mongoose.connection.readyState === 1 ? 'OK' : 'DEGRADED',
+  const connected = mongoose.connection.readyState === 1;
+
+  res.status(connected ? 200 : 503).json({
+    success: true,
+    status: connected ? 'OK' : 'DEGRADED',
     database: {
-      connected: mongoose.connection.readyState === 1,
+      connected,
       name: mongoose.connection.name || null,
       host: mongoose.connection.host || null,
     },
@@ -74,34 +91,67 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Apply rate limiting to API routes
+app.use('/api/', apiLimiter);
+
+// API routes
+app.use('/api/poll', pollRoutes);
+app.use('/api/votes', voteRoutes);
+app.get('/api/results', getResults);
+
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({
     success: false,
     message: 'अनुरोधित एंडपॉइंट उपलब्ध नहीं है।',
+    path: req.originalUrl,
   });
 });
 
 // Global error handler
 app.use((err, req, res, next) => {
-  console.error('Unhandled server error:', err);
+  console.error('[Server Error]', err);
+
+  if (err.message === 'Origin not allowed by CORS') {
+    return res.status(403).json({
+      success: false,
+      message: 'इस origin से अनुरोध की अनुमति नहीं है।',
+    });
+  }
+
+  if (res.headersSent) {
+    return next(err);
+  }
+
   res.status(500).json({
     success: false,
     message: 'सर्वर पर कोई अप्रत्याशित समस्या आई।',
   });
 });
 
-// Socket.IO event handling
+// Socket.IO connection handling
 io.on('connection', (socket) => {
-  // When a client connects, send immediate latest results
+  console.log(`[Socket.IO] Client connected: ${socket.id}`);
+
   socket.on('requestResults', async (pollId) => {
     try {
       const activePollId = pollId || POLL_CONFIG.pollId;
       const results = await getAggregateResults(activePollId);
+
       socket.emit('poll:resultsUpdated', results);
     } catch (err) {
-      console.error('Socket results error:', err.message);
+      console.error('[Socket.IO] Results error:', err.message);
+
+      socket.emit('poll:error', {
+        message: 'परिणाम लोड नहीं हो सके।',
+      });
     }
+  });
+
+  socket.on('disconnect', (reason) => {
+    console.log(
+      `[Socket.IO] Client disconnected: ${socket.id}, reason: ${reason}`
+    );
   });
 });
 
@@ -112,28 +162,36 @@ async function startServer() {
     await ensureAppCollections();
 
     const { ensureTalliesExist } = require('./services/resultsService');
+
     await ensureTalliesExist(POLL_CONFIG.pollId);
 
-    // Keep the backend port aligned with the Vite proxy target. Do not silently
-    // switch ports, otherwise the frontend continues proxying to the wrong port.
     server.on('error', (err) => {
-      console.error(`[Server] Could not listen on port ${PORT}: ${err.message}`);
+      console.error(
+        `[Server] Could not listen on port ${PORT}: ${err.message}`
+      );
+
       if (err.code === 'EADDRINUSE') {
-        console.error(`[Server] Port ${PORT} is already in use. Stop the other process or update both PORT and frontend/vite.config.js.`);
+        console.error(`[Server] Port ${PORT} is already in use.`);
       }
+
       process.exit(1);
     });
 
-    server.listen(PORT, () => {
+    server.listen(PORT, '0.0.0.0', () => {
       console.log('====================================================');
-      console.log(`🚀 EVM Polling Backend Server running on port ${PORT}`);
-      console.log(`📍 Client URL: ${CLIENT_URL}`);
-      console.log(`🗳️ Active Poll ID: ${POLL_CONFIG.pollId}`);
-      console.log(`🗄️ MongoDB database: ${mongoose.connection.name}`);
+      console.log(`Voting Backend running on port ${PORT}`);
+      console.log(`Client URL: ${CLIENT_URL}`);
+      console.log('Allowed frontend origins:', allowedOrigins);
+      console.log(`Active Poll ID: ${POLL_CONFIG.pollId}`);
+      console.log(`MongoDB database: ${mongoose.connection.name}`);
       console.log('====================================================');
     });
   } catch (err) {
-    console.error('Fatal: Could not initialize database connection.', err);
+    console.error(
+      '[Server] Could not initialize database connection:',
+      err
+    );
+
     process.exit(1);
   }
 }
