@@ -42,6 +42,19 @@ app.use(express.json({ limit: '10kb' }));
 // Apply rate limiting
 app.use('/api/', apiLimiter);
 
+// Root endpoint
+app.get('/', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'Ward 5 Voting Backend is running',
+    health: '/api/health',
+    endpoints: {
+      poll: '/api/poll',
+      votes: '/api/votes',
+      results: '/api/results',
+    },
+  });
+});
 // API Endpoints
 app.use('/api/poll', pollRoutes);
 app.use('/api/votes', voteRoutes);
